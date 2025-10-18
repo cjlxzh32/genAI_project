@@ -3,6 +3,7 @@
 
 # 忽略 node_modules 目录
 node_modules/
+.vscode/
 
 # 忽略编译生成的文件
 dist/
@@ -15,3 +16,7 @@ Thumbs.db
 # 忽略 Python 缓存文件
 __pycache__/
 *.pyc
+
+# ignore data files
+task_scoring/task_images/
+flux_kontext/output/

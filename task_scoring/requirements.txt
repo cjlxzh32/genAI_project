@@ -1,0 +1,22 @@
+# Conda packages
+torch
+torchvision
+numpy==1.26.0
+pandas
+scikit-image
+pillow
+tqdm
+clip
+diffusers==0.16.0
+accelerate==0.16.0
+datasets==2.11.0
+
+# Pip packages
+lpips
+image-reward
+torch-fidelity
+ftfy
+regex
+git+https://github.com/openai/CLIP.git
+pyarrow==9.0.0
+huggingface_hub==0.25.2
