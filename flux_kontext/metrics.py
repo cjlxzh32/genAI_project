@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "7"
+os.environ["CUDA_VISIBLE_DEVICES"] = "4"
 import pandas as pd
 import numpy as np
 from PIL import Image
@@ -103,8 +103,8 @@ def compute_fid(dir1, dir2):
 
 
 if __name__ == '__main__':
-    guidance_scale=2.5
-    num_inference_steps=20
+    guidance_scale=1.5
+    num_inference_steps=28
     lpips_model = lpips.LPIPS(net='vgg')
     if torch.cuda.is_available():
         lpips_model = lpips_model.cuda()

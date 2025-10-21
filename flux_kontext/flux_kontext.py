@@ -11,8 +11,8 @@ quantize(pipe.transformer, weights=qint8)
 freeze(pipe.transformer)
 pipe.to("cuda")
 
-guidance_scale=2.5
-num_inference_steps=40
+guidance_scale=3.5
+num_inference_steps=28
 
 root = f"task_scoring"
 image_root = f"{root}/task_images"
