@@ -11,6 +11,8 @@ from skimage.metrics import peak_signal_noise_ratio as psnr
 import ImageReward as IR
 import torch_fidelity
 from tqdm import tqdm
+import clip
+import torch.nn.functional as F
 
 
 # todo - plz follow the following instructions, it takes a while for installation:
@@ -101,17 +103,38 @@ def compute_fid(dir1, dir2):
     )
     return max(metrics['frechet_inception_distance'], 0.0)
 
+def compute_clip_t2i(model, text, image_path, device):
+    with torch.no_grad():
+        image = preprocess(Image.open(image_path)).unsqueeze(0).to(device)
+        text_tokens = clip.tokenize([text]).to(device)
+        image_features = model.encode_image(image)
+        text_features = model.encode_text(text_tokens)
+        # image_features /= image_features.norm(dim=-1, keepdim=True)
+        # text_features /= text_features.norm(dim=-1, keepdim=True)
+        # similarity = (image_features @ text_features.T)
+        similarity = F.cosine_similarity(image_features, text_features, dim=1)
+
+    return similarity.item()
+
+def compute_clip_i2i(model, image_path1, image_path2, device):
+    with torch.no_grad():
+        image1 = preprocess(Image.open(image_path1)).unsqueeze(0).to(device)
+        image2 = preprocess(Image.open(image_path2)).unsqueeze(0).to(device)
+        image_features1 = model.encode_image(image1)
+        image_features2 = model.encode_image(image2)
+        similarity = F.cosine_similarity(image_features1, image_features2, dim=1)
+    return similarity.item()
 
 if __name__ == '__main__':
-    guidance_scale=1.5
+    guidance_scale=5.5
     num_inference_steps=28
+    device = torch.device("cuda")
     lpips_model = lpips.LPIPS(net='vgg')
-    if torch.cuda.is_available():
-        lpips_model = lpips_model.cuda()
-    else:
-        lpips_model = lpips_model.cpu()
+    lpips_model = lpips_model.to(device)
 
-    ir_model = IR.load("ImageReward-v1.0")
+    clip_model, preprocess = clip.load("ViT-B/32", device=device)
+    
+    ir_model = IR.load("ImageReward-v1.0", device=device)
     # for task in ['adding', 'color_changing', 'replacing']:
     for task in ['adding']:
         results = []
@@ -141,6 +164,8 @@ if __name__ == '__main__':
             ssim_score = compute_ssim(orig_path, edit_path)
             psnr_score = compute_psnr(orig_path, edit_path)
             ir_score = compute_image_reward(edit_path, prompt, ir_model)
+            clip_t2i_score = compute_clip_t2i(clip_model, prompt, edit_path, device)
+            clip_i2i_score = compute_clip_i2i(clip_model, orig_path, edit_path, device)
 
             curr_output = {
                 'task': task,
