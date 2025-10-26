@@ -13,6 +13,7 @@ import torch_fidelity
 from tqdm import tqdm
 import clip
 import torch.nn.functional as F
+from transformers import CLIPProcessor, CLIPModel
 
 
 # todo - plz follow the following instructions, it takes a while for installation:
@@ -103,37 +104,54 @@ def compute_fid(dir1, dir2):
     )
     return max(metrics['frechet_inception_distance'], 0.0)
 
-def compute_clip_t2i(model, text, image_path, device):
+def compute_clip_t2i(clip_model, clip_processor, prompt, edit_path):
     with torch.no_grad():
-        image = preprocess(Image.open(image_path)).unsqueeze(0).to(device)
-        text_tokens = clip.tokenize([text]).to(device)
-        image_features = model.encode_image(image)
-        text_features = model.encode_text(text_tokens)
-        # image_features /= image_features.norm(dim=-1, keepdim=True)
-        # text_features /= text_features.norm(dim=-1, keepdim=True)
-        # similarity = (image_features @ text_features.T)
-        similarity = F.cosine_similarity(image_features, text_features, dim=1)
+        # image = preprocess(Image.open(image_path)).unsqueeze(0).to(device)
+        # text_tokens = clip.tokenize([text]).to(device)
+        # image_features = model.encode_image(image)
+        # text_features = model.encode_text(text_tokens)
+        # # image_features /= image_features.norm(dim=-1, keepdim=True)
+        # # text_features /= text_features.norm(dim=-1, keepdim=True)
+        # # similarity = (image_features @ text_features.T)
+        # similarity = F.cosine_similarity(image_features, text_features, dim=1)
+        image = Image.open(edit_path).convert('RGB')
+        inputs = clip_processor(text=[prompt], images=image, return_tensors="pt", padding=True)
+        inputs = {k: v.to(clip_model.device) for k, v in inputs.items()}
+        image_features = clip_model.get_image_features(pixel_values=inputs['pixel_values'])
+        text_features = clip_model.get_text_features(input_ids=inputs['input_ids'], attention_mask=inputs['attention_mask'])
+        similarity_score = F.cosine_similarity(image_features, text_features, dim=1)
 
-    return similarity.item()
+    return similarity_score.item()
 
-def compute_clip_i2i(model, image_path1, image_path2, device):
+def compute_clip_i2i(clip_model, clip_processor, image_path1, image_path2):
+    # with torch.no_grad():
+    #     image1 = preprocess(Image.open(image_path1)).unsqueeze(0).to(device)
+    #     image2 = preprocess(Image.open(image_path2)).unsqueeze(0).to(device)
+    #     image_features1 = model.encode_image(image1)
+    #     image_features2 = model.encode_image(image2)
+    #     similarity = F.cosine_similarity(image_features1, image_features2, dim=1)
     with torch.no_grad():
-        image1 = preprocess(Image.open(image_path1)).unsqueeze(0).to(device)
-        image2 = preprocess(Image.open(image_path2)).unsqueeze(0).to(device)
-        image_features1 = model.encode_image(image1)
-        image_features2 = model.encode_image(image2)
-        similarity = F.cosine_similarity(image_features1, image_features2, dim=1)
-    return similarity.item()
+        image1 = Image.open(image_path1).convert('RGB')
+        image2 = Image.open(image_path2).convert('RGB')
+        inputs = clip_processor(images=[image1, image2], return_tensors="pt", padding=True)
+        inputs = {k: v.to(clip_model.device) for k, v in inputs.items()}
+        image_features = clip_model.get_image_features(**inputs)
+        feat1 = image_features[0]
+        feat2 = image_features[1]
+        similarity_score = F.cosine_similarity(feat1, feat2, dim=0)
+    return similarity_score.item()
 
 if __name__ == '__main__':
-    guidance_scale=5.5
-    num_inference_steps=28
+    guidance_scale=2.5
+    num_inference_steps=50
     device = torch.device("cuda")
     lpips_model = lpips.LPIPS(net='vgg')
     lpips_model = lpips_model.to(device)
 
-    clip_model, preprocess = clip.load("ViT-B/32", device=device)
-    
+    # clip_model, preprocess = clip.load("ViT-B/32", device=device)
+    clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
+    clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+    clip_model.eval()
     ir_model = IR.load("ImageReward-v1.0", device=device)
     # for task in ['adding', 'color_changing', 'replacing']:
     for task in ['adding']:
@@ -164,8 +182,8 @@ if __name__ == '__main__':
             ssim_score = compute_ssim(orig_path, edit_path)
             psnr_score = compute_psnr(orig_path, edit_path)
             ir_score = compute_image_reward(edit_path, prompt, ir_model)
-            clip_t2i_score = compute_clip_t2i(clip_model, prompt, edit_path, device)
-            clip_i2i_score = compute_clip_i2i(clip_model, orig_path, edit_path, device)
+            clip_t2i_score = compute_clip_t2i(clip_model, clip_processor, prompt, edit_path)
+            clip_i2i_score = compute_clip_i2i(clip_model, clip_processor, orig_path, edit_path)
 
             curr_output = {
                 'task': task,
@@ -174,6 +192,8 @@ if __name__ == '__main__':
                 'ssim': ssim_score,
                 'psnr': psnr_score,
                 'image_reward': ir_score,
+                'i2i_clip': clip_i2i_score,
+                'i2t_clip': clip_t2i_score,
                 'fid': None
             }
             print(f"\t\t* {curr_output}")
@@ -184,6 +204,8 @@ if __name__ == '__main__':
             avg_ssim = sum(r['ssim'] for r in task_results) / len(task_results)
             avg_psnr = sum(r['psnr'] for r in task_results) / len(task_results)
             avg_ir = sum(r['image_reward'] for r in task_results) / len(task_results)
+            avg_i2i_clip = sum(r['i2i_clip'] for r in task_results) / len(task_results)
+            avg_i2t_clip = sum(r['i2t_clip'] for r in task_results) / len(task_results)
 
             print(f"\n>> Computing overall FID score (for task=`{task}`)...")
             fid_score = compute_fid(orig_dir, edit_dir)
@@ -197,6 +219,8 @@ if __name__ == '__main__':
                 'ssim': avg_ssim,
                 'psnr': avg_psnr,
                 'image_reward': avg_ir,
+                'i2i_clip': avg_i2i_clip,
+                'i2t_clip': avg_i2t_clip,
                 'fid': fid_score
             })
 
