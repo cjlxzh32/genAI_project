@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "6"
+os.environ["CUDA_VISIBLE_DEVICES"] = "4"
 import torch
 from diffusers import FluxKontextPipeline
 from optimum.quanto import quantize, freeze, qint8
@@ -11,7 +11,7 @@ quantize(pipe.transformer, weights=qint8)
 freeze(pipe.transformer)
 pipe.to("cuda")
 
-guidance_scale=5.5
+guidance_scale=7.5
 num_inference_steps=28
 
 root = f"task_scoring"

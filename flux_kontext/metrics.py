@@ -142,8 +142,8 @@ def compute_clip_i2i(clip_model, clip_processor, image_path1, image_path2):
     return similarity_score.item()
 
 if __name__ == '__main__':
-    guidance_scale=2.5
-    num_inference_steps=50
+    guidance_scale=6.5
+    num_inference_steps=28
     device = torch.device("cuda")
     lpips_model = lpips.LPIPS(net='vgg')
     lpips_model = lpips_model.to(device)
